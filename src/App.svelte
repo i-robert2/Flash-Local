@@ -1,0 +1,68 @@
+<script lang="ts">
+  import { route, toasts } from './lib/stores';
+  import DeckList from './lib/components/DeckList.svelte';
+  import StudyView from './lib/components/StudyView.svelte';
+  import DeckEditor from './lib/components/DeckEditor.svelte';
+  import CardEditor from './lib/components/CardEditor.svelte';
+  import ImportExport from './lib/components/ImportExport.svelte';
+  import Settings from './lib/components/Settings.svelte';
+  import Header from './lib/components/Header.svelte';
+  import Toast from './lib/components/Toast.svelte';
+</script>
+
+<div class="app">
+  <Header />
+
+  <main class="main">
+    {#if $route.page === 'home'}
+      <DeckList />
+    {:else if $route.page === 'study'}
+      <StudyView deckId={$route.deckId} />
+    {:else if $route.page === 'deck'}
+      <DeckEditor deckId={$route.deckId} />
+    {:else if $route.page === 'card'}
+      <CardEditor deckId={$route.deckId} cardId={$route.cardId} />
+    {:else if $route.page === 'import'}
+      <ImportExport />
+    {:else if $route.page === 'settings'}
+      <Settings />
+    {/if}
+  </main>
+
+  {#if $toasts.length > 0}
+    <div class="toast-container">
+      {#each $toasts as toast (toast.id)}
+        <Toast {toast} />
+      {/each}
+    </div>
+  {/if}
+</div>
+
+<style>
+  .app {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  .main {
+    flex: 1;
+    padding: 1rem;
+    max-width: 48rem;
+    margin: 0 auto;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .toast-container {
+    position: fixed;
+    bottom: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+</style>
