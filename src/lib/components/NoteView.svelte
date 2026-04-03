@@ -112,6 +112,16 @@
           }
         }
 
+        // After alignment, if we consumed all rendered text and landed on
+        // whitespace in the raw markdown, skip to the next content char.
+        // This happens when clicking at the START of a word — the preceding
+        // text ends before the paragraph break, so we need to jump past \n\n.
+        if (renderedIdx >= precedingText.length) {
+          while (strippedIdx < stripped.length && (stripped[strippedIdx] === '\n' || stripped[strippedIdx] === '\r')) {
+            strippedIdx++;
+          }
+        }
+
         clickOffset = strippedIdx < posMap.length ? posMap[strippedIdx] : raw.length;
       }
     }
