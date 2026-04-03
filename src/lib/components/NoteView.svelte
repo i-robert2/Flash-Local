@@ -41,46 +41,54 @@
       const sel = window.getSelection();
       if (sel && sel.rangeCount > 0) {
         const range = sel.getRangeAt(0);
+        const clickNode = range.startContainer;
+        const nodeOffset = range.startOffset;
 
-        // Walk all text nodes to find the character offset of the click
-        // within the full rendered text
-        const walker = document.createTreeWalker(contentBodyEl, NodeFilter.SHOW_TEXT);
-        let renderedOffset = 0;
-        let node: Node | null;
-        while ((node = walker.nextNode())) {
-          if (node === range.startContainer) {
-            renderedOffset += range.startOffset;
-            break;
+        if (clickNode.nodeType === Node.TEXT_NODE) {
+          const clickText = clickNode.textContent || '';
+          // Grab text around the click point for context
+          const ctxBefore = clickText.slice(Math.max(0, nodeOffset - 40), nodeOffset);
+          const ctxAfter = clickText.slice(nodeOffset, nodeOffset + 40);
+
+          const raw = note.content;
+
+          // Build a stripped version of the raw markdown without image syntax,
+          // and a mapping from stripped positions back to raw positions.
+          const imgRe = /!\[[^\]]*\]\([^)]*\)/g;
+          let stripped = '';
+          const posMap: number[] = []; // posMap[strippedIdx] = rawIdx
+          let lastEnd = 0;
+          let m: RegExpExecArray | null;
+          while ((m = imgRe.exec(raw)) !== null) {
+            for (let i = lastEnd; i < m.index; i++) {
+              posMap.push(i);
+              stripped += raw[i];
+            }
+            lastEnd = m.index + m[0].length;
           }
-          renderedOffset += (node.textContent?.length ?? 0);
-        }
-
-        // Build a map from rendered-text positions to raw-markdown positions
-        // by extracting the "visible text" from the raw markdown (skipping image syntax)
-        const raw = note.content;
-        const imgRe = /!\[[^\]]*\]\([^)]*\)/g;
-
-        // Collect ranges of image syntax in raw markdown
-        const skipRanges: [number, number][] = [];
-        let m: RegExpExecArray | null;
-        while ((m = imgRe.exec(raw)) !== null) {
-          skipRanges.push([m.index, m.index + m[0].length]);
-        }
-
-        // Walk through raw markdown, mapping visible chars to raw positions
-        let rawIdx = 0;
-        let visibleCount = 0;
-        while (rawIdx < raw.length && visibleCount < renderedOffset) {
-          // Check if we're inside an image syntax range
-          const skip = skipRanges.find(([s, e]) => rawIdx >= s && rawIdx < e);
-          if (skip) {
-            rawIdx = skip[1]; // jump past the image
-            continue;
+          for (let i = lastEnd; i < raw.length; i++) {
+            posMap.push(i);
+            stripped += raw[i];
           }
-          visibleCount++;
-          rawIdx++;
+
+          // Try progressively shorter snippets to find a match
+          const snippets = [
+            { before: ctxBefore, after: ctxAfter },
+            { before: ctxBefore.slice(-20), after: ctxAfter.slice(0, 20) },
+            { before: ctxBefore.slice(-10), after: ctxAfter.slice(0, 10) },
+          ];
+
+          for (const { before, after } of snippets) {
+            const snippet = before + after;
+            if (snippet.length === 0) continue;
+            const idx = stripped.indexOf(snippet);
+            if (idx !== -1) {
+              const strippedPos = idx + before.length;
+              clickOffset = strippedPos < posMap.length ? posMap[strippedPos] : raw.length;
+              break;
+            }
+          }
         }
-        clickOffset = rawIdx;
       }
     }
 
