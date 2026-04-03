@@ -92,10 +92,13 @@
             }
           }
 
-          // Skip past any trailing whitespace/newlines so the cursor lands
-          // on the next actual content, not in the blank lines above it
-          while (strippedIdx < stripped.length && (stripped[strippedIdx] === '\n' || stripped[strippedIdx] === '\r')) {
-            strippedIdx++;
+          // If we landed in whitespace/newlines between paragraphs,
+          // skip forward to the next content char — but only if the
+          // character we're on is actually a newline (not mid-word).
+          if (strippedIdx < stripped.length && stripped[strippedIdx] === '\n') {
+            while (strippedIdx < stripped.length && (stripped[strippedIdx] === '\n' || stripped[strippedIdx] === '\r')) {
+              strippedIdx++;
+            }
           }
 
           clickOffset = strippedIdx < posMap.length ? posMap[strippedIdx] : raw.length;
