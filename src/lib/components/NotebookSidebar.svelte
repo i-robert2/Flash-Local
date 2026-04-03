@@ -216,17 +216,35 @@
 
   .add-child {
     background: none;
-    border: none;
+    border: 1px solid transparent;
     cursor: pointer;
     color: var(--color-text-secondary);
     font-size: 0.9rem;
     padding: 0 0.3rem;
     opacity: 0;
-    transition: opacity 0.15s;
+    transition: opacity 0.15s, color 0.15s;
     font-family: var(--font);
+    border-radius: 4px;
+    flex-shrink: 0;
   }
   .tree-row:hover .add-child { opacity: 1; }
   .add-child:hover { color: var(--color-primary); }
+
+  @media (max-width: 640px) {
+    .add-child {
+      opacity: 1;
+      color: var(--color-primary);
+      border-color: var(--color-border);
+      padding: 0.15rem 0.4rem;
+      font-size: 0.75rem;
+      background: var(--color-surface-hover);
+    }
+
+    .tree-row {
+      min-height: 2.2rem;
+      padding: 0.3rem 0.5rem;
+    }
+  }
 
   .sidebar-footer {
     padding: 0.5rem;
