@@ -38,75 +38,81 @@
 
     let clickOffset = -1;
     if (event && contentBodyEl) {
-      const sel = window.getSelection();
-      if (sel && sel.rangeCount > 0) {
-        const range = sel.getRangeAt(0);
-        const clickNode = range.startContainer;
-        const nodeOffset = range.startOffset;
+      // Use caretRangeFromPoint to get the EXACT click position.
+      // getSelection() is unreliable here because dblclick selects the whole word.
+      let caretNode: Node | undefined;
+      let caretOff = 0;
+      if (document.caretRangeFromPoint) {
+        const r = document.caretRangeFromPoint(event.clientX, event.clientY);
+        if (r) { caretNode = r.startContainer; caretOff = r.startOffset; }
+      } else if ((document as any).caretPositionFromPoint) {
+        const p = (document as any).caretPositionFromPoint(event.clientX, event.clientY);
+        if (p) { caretNode = p.offsetNode; caretOff = p.offset; }
+      }
 
-        if (clickNode.nodeType === Node.TEXT_NODE) {
-          // Collect all rendered text BEFORE the click point.
-          // Double-click selects a word, so use the END of the selection
-          // to place the cursor after the clicked word.
-          const endNode = range.endContainer;
-          const endOffset = range.endOffset;
-
-          const walker = document.createTreeWalker(contentBodyEl, NodeFilter.SHOW_TEXT);
-          let precedingText = '';
-          let node: Node | null;
-          while ((node = walker.nextNode())) {
-            if (node === endNode) {
-              precedingText += endNode.textContent!.slice(0, endOffset);
-              break;
-            }
-            precedingText += node.textContent ?? '';
+      if (caretNode && caretNode.nodeType === Node.TEXT_NODE && contentBodyEl.contains(caretNode)) {
+        // Collect all rendered text before the exact click point
+        const walker = document.createTreeWalker(contentBodyEl, NodeFilter.SHOW_TEXT);
+        let precedingText = '';
+        let node: Node | null;
+        while ((node = walker.nextNode())) {
+          if (node === caretNode) {
+            precedingText += caretNode.textContent!.slice(0, caretOff);
+            break;
           }
+          precedingText += node.textContent ?? '';
+        }
 
-          const raw = note.content;
+        const raw = note.content;
 
-          // Strip image markdown syntax, build position map
-          const imgRe = /!\[[^\]]*\]\([^)]*\)/g;
-          let stripped = '';
-          const posMap: number[] = [];
-          let lastEnd = 0;
-          let m: RegExpExecArray | null;
-          while ((m = imgRe.exec(raw)) !== null) {
-            for (let i = lastEnd; i < m.index; i++) {
-              posMap.push(i);
-              stripped += raw[i];
-            }
-            lastEnd = m.index + m[0].length;
-          }
-          for (let i = lastEnd; i < raw.length; i++) {
+        // Strip image markdown syntax, build position map
+        const imgRe = /!\[[^\]]*\]\([^)]*\)/g;
+        let stripped = '';
+        const posMap: number[] = [];
+        let lastEnd = 0;
+        let m: RegExpExecArray | null;
+        while ((m = imgRe.exec(raw)) !== null) {
+          for (let i = lastEnd; i < m.index; i++) {
             posMap.push(i);
             stripped += raw[i];
           }
-
-          // Now find where precedingText ends in the stripped markdown.
-          // The rendered text may differ from markdown (headers, bold, etc),
-          // so match greedily: walk both strings and count matching chars.
-          let strippedIdx = 0;
-          let renderedIdx = 0;
-          while (renderedIdx < precedingText.length && strippedIdx < stripped.length) {
-            if (precedingText[renderedIdx] === stripped[strippedIdx]) {
-              renderedIdx++;
-              strippedIdx++;
-            } else {
-              // Skip non-matching chars in stripped (markdown syntax like #, *, etc.)
-              strippedIdx++;
-            }
-          }
-
-          // If we landed in whitespace/newlines between paragraphs,
-          // only skip if we didn't consume any rendered text (empty click)
-          if (renderedIdx === 0 && strippedIdx < stripped.length && stripped[strippedIdx] === '\n') {
-            while (strippedIdx < stripped.length && (stripped[strippedIdx] === '\n' || stripped[strippedIdx] === '\r')) {
-              strippedIdx++;
-            }
-          }
-
-          clickOffset = strippedIdx < posMap.length ? posMap[strippedIdx] : raw.length;
+          lastEnd = m.index + m[0].length;
         }
+        for (let i = lastEnd; i < raw.length; i++) {
+          posMap.push(i);
+          stripped += raw[i];
+        }
+
+        // Align rendered text with stripped markdown, handling whitespace flexibly.
+        // Rendered text has spaces/no-gaps where raw has \n or \n\n.
+        const isWs = (c: string) => c === ' ' || c === '\n' || c === '\r' || c === '\t';
+
+        let strippedIdx = 0;
+        let renderedIdx = 0;
+        while (renderedIdx < precedingText.length && strippedIdx < stripped.length) {
+          const rc = precedingText[renderedIdx];
+          const sc = stripped[strippedIdx];
+
+          if (rc === sc) {
+            renderedIdx++;
+            strippedIdx++;
+          } else if (isWs(rc) && isWs(sc)) {
+            // Both whitespace but different chars — consume both
+            renderedIdx++;
+            strippedIdx++;
+          } else if (isWs(sc)) {
+            // Extra whitespace in raw markdown (\n\n between paragraphs)
+            strippedIdx++;
+          } else if (isWs(rc)) {
+            // Extra whitespace in rendered text
+            renderedIdx++;
+          } else {
+            // Non-whitespace mismatch — skip markdown syntax (e.g. #, *, _)
+            strippedIdx++;
+          }
+        }
+
+        clickOffset = strippedIdx < posMap.length ? posMap[strippedIdx] : raw.length;
       }
     }
 
