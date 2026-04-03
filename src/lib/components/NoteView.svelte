@@ -38,8 +38,7 @@
 
     let clickOffset = -1;
     if (event && contentBodyEl) {
-      // Use caretRangeFromPoint to get the EXACT click position.
-      // getSelection() is unreliable here because dblclick selects the whole word.
+      // Use caretRangeFromPoint for exact click position (not affected by dblclick word selection)
       let caretNode: Node | undefined;
       let caretOff = 0;
       if (document.caretRangeFromPoint) {
@@ -50,79 +49,96 @@
         if (p) { caretNode = p.offsetNode; caretOff = p.offset; }
       }
 
-      if (caretNode && caretNode.nodeType === Node.TEXT_NODE && contentBodyEl.contains(caretNode)) {
-        // Collect all rendered text before the exact click point
-        const walker = document.createTreeWalker(contentBodyEl, NodeFilter.SHOW_TEXT);
-        let precedingText = '';
-        let node: Node | null;
-        while ((node = walker.nextNode())) {
-          if (node === caretNode) {
-            precedingText += caretNode.textContent!.slice(0, caretOff);
-            break;
+      if (caretNode && contentBodyEl.contains(caretNode)) {
+        // Step 1: Find which block element (p, h1-h6, li, pre) the click is in
+        let blockEl: HTMLElement | null = caretNode.nodeType === Node.TEXT_NODE
+          ? caretNode.parentElement : caretNode as HTMLElement;
+        while (blockEl && blockEl !== contentBodyEl) {
+          const display = getComputedStyle(blockEl).display;
+          if (display === 'block' || display === 'list-item') break;
+          blockEl = blockEl.parentElement;
+        }
+        if (!blockEl || blockEl === contentBodyEl) blockEl = contentBodyEl.firstElementChild as HTMLElement;
+
+        // Step 2: Count which block index (0-based) this is among content-body's block children
+        const blocks = Array.from(contentBodyEl.querySelectorAll(':scope > *'));
+        let blockIndex = blocks.indexOf(blockEl);
+        if (blockIndex === -1) {
+          // The click might be in a nested element — find the top-level ancestor
+          let ancestor: HTMLElement | null = blockEl;
+          while (ancestor && ancestor.parentElement !== contentBodyEl) {
+            ancestor = ancestor.parentElement;
           }
-          precedingText += node.textContent ?? '';
+          if (ancestor) blockIndex = blocks.indexOf(ancestor);
+        }
+        if (blockIndex === -1) blockIndex = 0;
+
+        // Step 3: Get character offset within this block's text
+        const blockText = blocks[blockIndex]?.textContent ?? '';
+        let inBlockOffset = 0;
+        if (caretNode.nodeType === Node.TEXT_NODE) {
+          const blockWalker = document.createTreeWalker(blocks[blockIndex], NodeFilter.SHOW_TEXT);
+          let tn: Node | null;
+          while ((tn = blockWalker.nextNode())) {
+            if (tn === caretNode) {
+              inBlockOffset += caretOff;
+              break;
+            }
+            inBlockOffset += (tn.textContent?.length ?? 0);
+          }
         }
 
+        // Step 4: Split raw markdown into blocks (separated by blank lines)
+        // and filter out image-only blocks
         const raw = note.content;
-
-        // Strip image markdown syntax, build position map
-        const imgRe = /!\[[^\]]*\]\([^)]*\)/g;
-        let stripped = '';
-        const posMap: number[] = [];
-        let lastEnd = 0;
-        let m: RegExpExecArray | null;
-        while ((m = imgRe.exec(raw)) !== null) {
-          for (let i = lastEnd; i < m.index; i++) {
-            posMap.push(i);
-            stripped += raw[i];
+        const rawBlocks: { text: string; start: number }[] = [];
+        let pos = 0;
+        for (const part of raw.split(/\n\n+/)) {
+          const trimmed = part.replace(/!\[[^\]]*\]\([^)]*\)/g, '').trim();
+          // Only count blocks that have visible text (skip image-only blocks)
+          if (trimmed.length > 0 || part.trim().length === 0) {
+            rawBlocks.push({ text: part, start: pos });
           }
-          lastEnd = m.index + m[0].length;
+          pos += part.length;
+          // Account for the \n\n separator
+          const sepMatch = raw.slice(pos).match(/^\n\n+/);
+          if (sepMatch) pos += sepMatch[0].length;
         }
-        for (let i = lastEnd; i < raw.length; i++) {
-          posMap.push(i);
-          stripped += raw[i];
-        }
 
-        // Align rendered text with stripped markdown, handling whitespace flexibly.
-        // Rendered text has spaces/no-gaps where raw has \n or \n\n.
-        const isWs = (c: string) => c === ' ' || c === '\n' || c === '\r' || c === '\t';
+        // Step 5: Map block index to raw position
+        const targetBlock = rawBlocks[Math.min(blockIndex, rawBlocks.length - 1)];
+        if (targetBlock) {
+          // Strip markdown syntax from the raw block to get plain text for offset mapping
+          const rawBlockText = targetBlock.text;
+          const plainBlock = rawBlockText.replace(/!\[[^\]]*\]\([^)]*\)/g, '');
 
-        let strippedIdx = 0;
-        let renderedIdx = 0;
-        while (renderedIdx < precedingText.length && strippedIdx < stripped.length) {
-          const rc = precedingText[renderedIdx];
-          const sc = stripped[strippedIdx];
+          // Clamp the offset — the plain text may differ slightly from rendered text
+          const clampedOffset = Math.min(inBlockOffset, rawBlockText.length);
 
-          if (rc === sc) {
-            renderedIdx++;
-            strippedIdx++;
-          } else if (isWs(rc) && isWs(sc)) {
-            // Both whitespace but different chars — consume both
-            renderedIdx++;
-            strippedIdx++;
-          } else if (isWs(sc)) {
-            // Extra whitespace in raw markdown (\n\n between paragraphs)
-            strippedIdx++;
-          } else if (isWs(rc)) {
-            // Extra whitespace in rendered text
-            renderedIdx++;
-          } else {
-            // Non-whitespace mismatch — skip markdown syntax (e.g. #, *, _)
-            strippedIdx++;
+          // Map plain-text offset to raw offset (accounting for removed image syntax)
+          let rawCharIdx = 0;
+          let plainCharIdx = 0;
+          const imgRanges: [number, number][] = [];
+          const imgRe = /!\[[^\]]*\]\([^)]*\)/g;
+          let im: RegExpExecArray | null;
+          while ((im = imgRe.exec(rawBlockText)) !== null) {
+            imgRanges.push([im.index, im.index + im[0].length]);
           }
-        }
 
-        // After alignment, if we consumed all rendered text and landed on
-        // whitespace in the raw markdown, skip to the next content char.
-        // This happens when clicking at the START of a word — the preceding
-        // text ends before the paragraph break, so we need to jump past \n\n.
-        if (renderedIdx >= precedingText.length) {
-          while (strippedIdx < stripped.length && (stripped[strippedIdx] === '\n' || stripped[strippedIdx] === '\r')) {
-            strippedIdx++;
+          let rawOff = 0;
+          let visibleCount = 0;
+          while (rawOff < rawBlockText.length && visibleCount < clampedOffset) {
+            const skip = imgRanges.find(([s, e]) => rawOff >= s && rawOff < e);
+            if (skip) {
+              rawOff = skip[1];
+              continue;
+            }
+            visibleCount++;
+            rawOff++;
           }
-        }
 
-        clickOffset = strippedIdx < posMap.length ? posMap[strippedIdx] : raw.length;
+          clickOffset = targetBlock.start + rawOff;
+        }
       }
     }
 
