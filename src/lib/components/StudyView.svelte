@@ -5,8 +5,13 @@
   import { Rating, type Card } from '../core/types';
   import { navigate, showToast, settings } from '../stores';
   import CardContent from './CardContent.svelte';
+  import type { Note, Notebook } from '../core/types';
+  import { depthLabel } from '../core/types';
 
   let { deckId }: { deckId: string } = $props();
+
+  // Learn-more note info for current card
+  let learnMoreInfo = $state<{ noteId: string; title: string; notebookName: string; notebookId: string } | null>(null);
 
   let cards = $state<Card[]>([]);
   let currentIndex = $state(0);
@@ -75,6 +80,35 @@
       if (e.key === '4') rate(Rating.Easy);
     }
   }
+
+  // Load learn-more info when card changes
+  $effect(() => {
+    const card = currentCard;
+    if (card?.noteRef) {
+      db.notes.get(card.noteRef).then(async (note) => {
+        if (note) {
+          const nb = await db.notebooks.get(note.notebookId);
+          learnMoreInfo = {
+            noteId: note.id,
+            title: note.title,
+            notebookName: nb?.name ?? 'Notebook',
+            notebookId: note.notebookId,
+          };
+        } else {
+          learnMoreInfo = null;
+        }
+      });
+    } else {
+      learnMoreInfo = null;
+    }
+  });
+
+  function openLearnMore() {
+    if (!learnMoreInfo) return;
+    // Open in new tab so the study session is not disrupted
+    const url = `${window.location.origin}${window.location.pathname}#/notebook/${learnMoreInfo.notebookId}/note/${learnMoreInfo.noteId}`;
+    window.open(url, '_blank');
+  }
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -104,6 +138,11 @@
         </div>
         <div class="card-face card-back">
           <CardContent content={currentCard.back} />
+          {#if learnMoreInfo && flipped}
+            <button class="learn-more-btn" onclick={(e: MouseEvent) => { e.stopPropagation(); openLearnMore(); }}>
+              📓 Learn More: {learnMoreInfo.notebookName} → {learnMoreInfo.title}
+            </button>
+          {/if}
         </div>
       </div>
     </div>
@@ -185,6 +224,31 @@
     bottom: 1rem;
     color: var(--color-text-secondary);
     font-size: 0.85rem;
+  }
+
+  .learn-more-btn {
+    position: absolute;
+    bottom: 0.75rem;
+    left: 1rem;
+    right: 1rem;
+    background: var(--color-surface-hover);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 0.5rem 0.75rem;
+    color: var(--color-primary);
+    font-size: 0.8rem;
+    font-family: var(--font);
+    cursor: pointer;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition: background 0.15s;
+  }
+
+  .learn-more-btn:hover {
+    background: var(--color-surface);
+    border-color: var(--color-primary);
   }
 
   .rating-buttons {

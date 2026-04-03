@@ -26,6 +26,8 @@ export interface Card {
   /** FSRS difficulty (1-10) */
   difficulty?: number;
   lastReview?: number;
+  /** Optional reference to a Note for "Learn More" */
+  noteRef?: string;
 }
 
 export interface Deck {
