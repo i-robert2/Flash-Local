@@ -1,7 +1,7 @@
 <script lang="ts">
   import { db } from '../core/storage';
-  import { navigate } from '../stores';
-  import type { Note } from '../core/types';
+  import { navigate, showToast } from '../stores';
+  import type { Note, Notebook } from '../core/types';
   import { depthLabel, depthColor as getDepthColor } from '../core/types';
 
   interface Props {
@@ -10,75 +10,157 @@
 
   let { notebookId }: Props = $props();
 
+  let notebook = $state<Notebook | null>(null);
   let notes = $state<Note[]>([]);
   let search = $state('');
+  let collapsed = $state<Set<string>>(new Set());
 
   $effect(() => {
+    db.notebooks.get(notebookId).then(nb => { notebook = nb ?? null; });
     db.notes.where('notebookId').equals(notebookId).toArray().then(n => { notes = n; });
   });
-
-  let filtered = $derived(
-    search.trim()
-      ? notes.filter(n =>
-          n.title.toLowerCase().includes(search.toLowerCase()) ||
-          n.tags.some(t => t.toLowerCase().includes(search.toLowerCase()))
-        )
-      : notes
-  );
 
   function getColor(depth: number): string {
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
     return getDepthColor(depth, isDark ? 'dark' : 'light');
   }
+
+  function getChildren(parentId: string | null): Note[] {
+    return notes
+      .filter(n => n.parentId === parentId)
+      .sort((a, b) => a.created - b.created);
+  }
+
+  function hasChildren(id: string): boolean {
+    return notes.some(n => n.parentId === id);
+  }
+
+  function toggleCollapse(id: string) {
+    const next = new Set(collapsed);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    collapsed = next;
+  }
+
+  // For search: flatten matching notes + their ancestors
+  let matchingIds = $derived<Set<string>>(() => {
+    if (!search.trim()) return new Set<string>();
+    const q = search.toLowerCase();
+    const matches = notes.filter(n =>
+      n.title.toLowerCase().includes(q) ||
+      n.content.replace(/!\[[^\]]*\]\([^)]*\)/g, '').toLowerCase().includes(q) ||
+      n.tags.some(t => t.toLowerCase().includes(q))
+    );
+    // Include all ancestors so the tree stays navigable
+    const ids = new Set<string>();
+    for (const m of matches) {
+      ids.add(m.id);
+      let parent = m.parentId;
+      while (parent) {
+        ids.add(parent);
+        const p = notes.find(n => n.id === parent);
+        parent = p?.parentId ?? null;
+      }
+    }
+    return ids;
+  });
+
+  function isVisible(note: Note): boolean {
+    if (!search.trim()) return true;
+    return matchingIds().has(note.id);
+  }
+
+  function isMatch(note: Note): boolean {
+    if (!search.trim()) return false;
+    const q = search.toLowerCase();
+    return note.title.toLowerCase().includes(q) ||
+      note.content.replace(/!\[[^\]]*\]\([^)]*\)/g, '').toLowerCase().includes(q) ||
+      note.tags.some(t => t.toLowerCase().includes(q));
+  }
+
+  async function addChild(parentId: string | null, depth: number) {
+    const id = crypto.randomUUID();
+    const now = Date.now();
+    const note: Note = {
+      id,
+      notebookId,
+      parentId,
+      depth,
+      title: 'Untitled',
+      content: '',
+      tags: [],
+      created: now,
+      modified: now,
+    };
+    await db.notes.add(note);
+    showToast(`${depthLabel(depth)} created`, 'success');
+    notes = await db.notes.where('notebookId').equals(notebookId).toArray();
+    navigate(`/notebook/${notebookId}/note/${id}/edit`);
+  }
 </script>
 
-<div class="note-list">
+<div class="note-tree-page">
   <div class="top-row">
-    <h2>All Notes</h2>
+    <h2>{notebook?.name ?? 'Notebook'}</h2>
     <div class="top-actions">
+      <button class="btn btn-primary btn-sm" onclick={() => addChild(null, 0)}>+ Chapter</button>
       <button class="btn btn-secondary btn-sm" onclick={() => navigate(`/notebook/${notebookId}/map`)}>
-        🗺 Knowledge Map
+        🗺 Map
       </button>
     </div>
   </div>
 
-  {#if notes.length > 0}
-    <input type="search" bind:value={search} placeholder="Search notes…" />
-  {/if}
+  <input type="search" bind:value={search} placeholder="Search notes by title or content…" />
 
-  {#if filtered.length === 0}
+  {#if notes.length === 0}
     <div class="empty">
-      {#if notes.length === 0}
-        <p>No notes yet. Use the sidebar to create chapters!</p>
-      {:else}
-        <p>No notes match your search.</p>
-      {/if}
+      <p>No chapters yet. Click <strong>+ Chapter</strong> to start building your notebook.</p>
     </div>
   {:else}
-    <div class="notes-grid">
-      {#each filtered.sort((a, b) => a.depth - b.depth || a.created - b.created) as note (note.id)}
-        <button class="note-card" onclick={() => navigate(`/notebook/${notebookId}/note/${note.id}`)}>
-          <div class="note-depth-bar" style="background: {getColor(note.depth)}"></div>
-          <div class="note-body">
-            <span class="note-badge" style="color: {getColor(note.depth)}">{depthLabel(note.depth)}</span>
-            <h3 class="note-title">{note.title}</h3>
-            <p class="note-preview">{note.content.slice(0, 100)}{note.content.length > 100 ? '…' : ''}</p>
-            {#if note.tags.length > 0}
-              <div class="note-tags">
-                {#each note.tags.slice(0, 3) as tag}
-                  <span class="tag">{tag}</span>
-                {/each}
-              </div>
-            {/if}
-          </div>
-        </button>
+    <div class="tree">
+      {#each getChildren(null) as note (note.id)}
+        {#if isVisible(note)}
+          {@render treeNode(note)}
+        {/if}
       {/each}
     </div>
   {/if}
 </div>
 
+{#snippet treeNode(note: Note)}
+  <div class="tree-item">
+    <div class="tree-row" class:tree-match={isMatch(note)} style="padding-left: {note.depth * 1.2}rem">
+      <div class="row-left">
+        {#if hasChildren(note.id)}
+          <button class="toggle" onclick={() => toggleCollapse(note.id)}>
+            {collapsed.has(note.id) ? '▸' : '▾'}
+          </button>
+        {:else}
+          <span class="toggle-spacer"></span>
+        {/if}
+        <span class="depth-dot" style="background: {getColor(note.depth)}"></span>
+        <button class="tree-label" onclick={() => navigate(`/notebook/${notebookId}/note/${note.id}`)}>
+          <span class="label-title">{note.title}</span>
+          <span class="label-badge" style="color: {getColor(note.depth)}">{depthLabel(note.depth)}</span>
+        </button>
+      </div>
+      <button
+        class="add-child-btn"
+        onclick={() => addChild(note.id, note.depth + 1)}
+        title="Add {depthLabel(note.depth + 1)}"
+      >+</button>
+    </div>
+    {#if !collapsed.has(note.id)}
+      {#each getChildren(note.id) as child (child.id)}
+        {#if isVisible(child)}
+          {@render treeNode(child)}
+        {/if}
+      {/each}
+    {/if}
+  </div>
+{/snippet}
+
 <style>
-  .note-list { display: flex; flex-direction: column; gap: 1rem; }
+  .note-tree-page { display: flex; flex-direction: column; gap: 0.75rem; }
 
   .top-row {
     display: flex;
@@ -97,78 +179,106 @@
     padding: 3rem 1rem;
   }
 
-  .notes-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
-    gap: 0.75rem;
-  }
+  .tree { display: flex; flex-direction: column; }
 
-  @media (max-width: 640px) {
-    .notes-grid { grid-template-columns: 1fr; }
-    .top-row { flex-direction: column; align-items: stretch; }
-    .top-actions { justify-content: flex-end; }
-  }
+  .tree-item { display: flex; flex-direction: column; }
 
-  .note-card {
+  .tree-row {
     display: flex;
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius);
-    overflow: hidden;
-    cursor: pointer;
-    text-align: left;
-    transition: border-color 0.15s;
-    font-family: var(--font);
-    color: var(--color-text);
-  }
-
-  .note-card:hover { border-color: var(--color-primary); }
-
-  .note-depth-bar {
-    width: 4px;
-    flex-shrink: 0;
-  }
-
-  .note-body {
-    display: flex;
-    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
     gap: 0.3rem;
-    padding: 0.75rem;
+    padding: 0.4rem 0.5rem;
+    border-radius: 8px;
+    transition: background 0.1s;
+  }
+
+  .tree-row:hover { background: var(--color-surface-hover); }
+  .tree-match { background: rgba(79, 70, 229, 0.08); }
+
+  .row-left {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    flex: 1;
     min-width: 0;
   }
 
-  .note-badge {
-    font-size: 0.65rem;
+  .toggle {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--color-text-secondary);
+    font-size: 0.75rem;
+    width: 1.2rem;
+    text-align: center;
+    padding: 0;
+    flex-shrink: 0;
+    font-family: var(--font);
+  }
+
+  .toggle-spacer { width: 1.2rem; flex-shrink: 0; }
+
+  .depth-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .tree-label {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--color-text);
+    font-family: var(--font);
+    text-align: left;
+    flex: 1;
+    min-width: 0;
+    padding: 0.2rem 0;
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+  }
+  .tree-label:hover .label-title { color: var(--color-primary); }
+
+  .label-title {
+    font-size: 0.9rem;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition: color 0.1s;
+  }
+
+  .label-badge {
+    font-size: 0.6rem;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.03em;
+    flex-shrink: 0;
+    opacity: 0.7;
   }
 
-  .note-title {
-    margin: 0;
-    font-size: 0.9rem;
-    font-weight: 600;
-    line-height: 1.3;
-  }
-
-  .note-preview {
-    margin: 0;
-    font-size: 0.78rem;
-    color: var(--color-text-secondary);
-    line-height: 1.4;
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-  }
-
-  .note-tags { display: flex; flex-wrap: wrap; gap: 0.25rem; }
-
-  .tag {
-    font-size: 0.65rem;
-    background: rgba(79, 70, 229, 0.1);
+  .add-child-btn {
+    background: var(--color-surface-hover);
+    border: 1px solid var(--color-border);
+    cursor: pointer;
     color: var(--color-primary);
-    padding: 0.1rem 0.35rem;
+    font-size: 0.75rem;
+    padding: 0.1rem 0.4rem;
     border-radius: 4px;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity 0.15s;
+    font-family: var(--font);
+  }
+  .tree-row:hover .add-child-btn { opacity: 1; }
+
+  @media (max-width: 640px) {
+    .add-child-btn { opacity: 1; }
+    .tree-row { padding: 0.5rem 0.4rem; }
+    .top-row { flex-direction: column; align-items: stretch; }
+    .top-actions { justify-content: flex-end; }
   }
 </style>
