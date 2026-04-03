@@ -41,35 +41,46 @@
       const sel = window.getSelection();
       if (sel && sel.rangeCount > 0) {
         const range = sel.getRangeAt(0);
-        const clickNode = range.startContainer;
-        const nodeOffset = range.startOffset;
 
-        if (clickNode.nodeType === Node.TEXT_NODE) {
-          const clickText = clickNode.textContent || '';
-          // Get surrounding context: text before + after the click within this node
-          const before = clickText.slice(Math.max(0, nodeOffset - 30), nodeOffset);
-          const after = clickText.slice(nodeOffset, nodeOffset + 30);
-          const searchSnippet = before + after;
-
-          if (searchSnippet.length > 0) {
-            // Find this snippet in the raw markdown
-            const rawContent = note.content;
-            const idx = rawContent.indexOf(searchSnippet);
-            if (idx !== -1) {
-              // Place cursor at the exact click position within the found snippet
-              clickOffset = idx + before.length;
-            } else {
-              // Fallback: try just the word/nearby text
-              const shortBefore = clickText.slice(Math.max(0, nodeOffset - 10), nodeOffset);
-              const shortAfter = clickText.slice(nodeOffset, nodeOffset + 10);
-              const shortSnippet = shortBefore + shortAfter;
-              const shortIdx = rawContent.indexOf(shortSnippet);
-              if (shortIdx !== -1) {
-                clickOffset = shortIdx + shortBefore.length;
-              }
-            }
+        // Walk all text nodes to find the character offset of the click
+        // within the full rendered text
+        const walker = document.createTreeWalker(contentBodyEl, NodeFilter.SHOW_TEXT);
+        let renderedOffset = 0;
+        let node: Node | null;
+        while ((node = walker.nextNode())) {
+          if (node === range.startContainer) {
+            renderedOffset += range.startOffset;
+            break;
           }
+          renderedOffset += (node.textContent?.length ?? 0);
         }
+
+        // Build a map from rendered-text positions to raw-markdown positions
+        // by extracting the "visible text" from the raw markdown (skipping image syntax)
+        const raw = note.content;
+        const imgRe = /!\[[^\]]*\]\([^)]*\)/g;
+
+        // Collect ranges of image syntax in raw markdown
+        const skipRanges: [number, number][] = [];
+        let m: RegExpExecArray | null;
+        while ((m = imgRe.exec(raw)) !== null) {
+          skipRanges.push([m.index, m.index + m[0].length]);
+        }
+
+        // Walk through raw markdown, mapping visible chars to raw positions
+        let rawIdx = 0;
+        let visibleCount = 0;
+        while (rawIdx < raw.length && visibleCount < renderedOffset) {
+          // Check if we're inside an image syntax range
+          const skip = skipRanges.find(([s, e]) => rawIdx >= s && rawIdx < e);
+          if (skip) {
+            rawIdx = skip[1]; // jump past the image
+            continue;
+          }
+          visibleCount++;
+          rawIdx++;
+        }
+        clickOffset = rawIdx;
       }
     }
 

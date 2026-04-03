@@ -43,23 +43,23 @@
           parentId = note.parentId;
         }
         loaded = true;
-        // Place cursor at the position from NoteView
+        // Place cursor at the position from NoteView double-click
         if (initialCursor >= 0) {
-          requestAnimationFrame(() => {
+          // Double rAF to ensure Svelte has rendered the textarea
+          requestAnimationFrame(() => requestAnimationFrame(() => {
             if (textareaEl) {
               const pos = Math.min(initialCursor, content.length);
               textareaEl.focus();
               textareaEl.setSelectionRange(pos, pos);
 
               // Scroll textarea so the cursor line is visible near the middle
-              // Estimate the line the cursor is on
               const textBefore = content.slice(0, pos);
               const linesBefore = textBefore.split('\n').length;
               const lineHeight = parseFloat(getComputedStyle(textareaEl).lineHeight) || 24;
               const targetScroll = (linesBefore * lineHeight) - (textareaEl.clientHeight / 2);
               textareaEl.scrollTop = Math.max(0, targetScroll);
             }
-          });
+          }));
         }
       });
     } else {
