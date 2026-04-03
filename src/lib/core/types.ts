@@ -36,6 +36,7 @@ export interface Deck {
   description: string;
   created: number;
   modified: number;
+  favorite?: boolean;
 }
 
 export interface ReviewLog {
@@ -120,6 +121,7 @@ export interface Notebook {
   description: string;
   created: number;
   modified: number;
+  favorite?: boolean;
 }
 
 export interface Note {

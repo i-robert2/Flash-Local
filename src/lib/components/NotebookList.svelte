@@ -9,11 +9,12 @@
   let showNew = $state(false);
   let newName = $state('');
   let newDesc = $state('');
+  let search = $state('');
 
   const sub = liveQuery(() => db.notebooks.toArray());
   $effect(() => {
     const subscription = sub.subscribe(async (val) => {
-      notebooks = val.sort((a, b) => b.modified - a.modified);
+      notebooks = val;
       const counts: Record<string, number> = {};
       for (const nb of val) {
         counts[nb.id] = await db.notes.where('notebookId').equals(nb.id).count();
@@ -22,6 +23,27 @@
     });
     return () => subscription.unsubscribe();
   });
+
+  let filtered = $derived(
+    search.trim()
+      ? notebooks.filter(nb =>
+          nb.name.toLowerCase().includes(search.toLowerCase()) ||
+          nb.description.toLowerCase().includes(search.toLowerCase())
+        )
+      : notebooks
+  );
+
+  let sorted = $derived(
+    [...filtered].sort((a, b) => {
+      if (a.favorite && !b.favorite) return -1;
+      if (!a.favorite && b.favorite) return 1;
+      return b.modified - a.modified;
+    })
+  );
+
+  async function toggleFavorite(id: string, current: boolean | undefined) {
+    await db.notebooks.update(id, { favorite: !current });
+  }
 
   async function createNotebook() {
     if (!newName.trim()) { showToast('Name is required', 'error'); return; }
@@ -69,16 +91,23 @@
     </div>
   {/if}
 
+  {#if notebooks.length > 0}
+    <input type="search" bind:value={search} placeholder="Search notebooks…" />
+  {/if}
+
   {#if notebooks.length === 0 && !showNew}
     <div class="empty">
       <p>No notebooks yet. Create one to start organising your notes!</p>
     </div>
+  {:else if sorted.length === 0}
+    <div class="empty">
+      <p>No notebooks match your search.</p>
+    </div>
   {:else}
     <div class="nb-grid">
-      {#each notebooks as nb (nb.id)}
+      {#each sorted as nb (nb.id)}
         <div class="nb-card">
           <button class="nb-card-main" onclick={() => navigate(`/notebook/${nb.id}`)}>
-            <span class="nb-icon">📓</span>
             <div class="nb-info">
               <h3>{nb.name}</h3>
               {#if nb.description}
@@ -88,6 +117,9 @@
             </div>
           </button>
           <div class="nb-actions">
+            <button class="fav-btn" onclick={() => toggleFavorite(nb.id, nb.favorite)} title={nb.favorite ? 'Remove from favorites' : 'Add to favorites'}>
+              {nb.favorite ? '★' : '☆'}
+            </button>
             <button class="btn btn-ghost btn-sm" onclick={() => navigate(`/notebook/${nb.id}/map`)} title="Knowledge Map">🗺</button>
             <button class="btn btn-danger-ghost btn-sm" onclick={() => deleteNotebook(nb.id)} title="Delete">🗑</button>
           </div>
@@ -181,5 +213,15 @@
     display: flex;
     flex-direction: column;
     border-left: 1px solid var(--color-border);
+  }
+
+  .fav-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1.1rem;
+    color: var(--color-warning);
+    padding: 0.4rem;
+    line-height: 1;
   }
 </style>

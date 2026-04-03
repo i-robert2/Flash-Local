@@ -10,9 +10,73 @@
   let importing = $state(false);
   let deckNameForImport = $state('Imported Deck');
 
+  // Folder reading
+  let folderSupported = $state(typeof window !== 'undefined' && 'showDirectoryPicker' in window);
+  let folderHandle = $state<FileSystemDirectoryHandle | null>(null);
+  let folderName = $state('');
+  let folderFiles = $state<string[]>([]);
+
   onMount(async () => {
     decks = await db.decks.toArray();
+    // Restore saved folder handle from IndexedDB if available
+    const saved = localStorage.getItem('flashlocal-folder-name');
+    if (saved) folderName = saved;
   });
+
+  async function pickFolder() {
+    try {
+      const handle = await (window as any).showDirectoryPicker({ mode: 'read' });
+      folderHandle = handle;
+      folderName = handle.name;
+      localStorage.setItem('flashlocal-folder-name', handle.name);
+      await scanFolder();
+    } catch (e: any) {
+      if (e.name !== 'AbortError') showToast('Could not open folder', 'error');
+    }
+  }
+
+  async function scanFolder() {
+    if (!folderHandle) return;
+    const files: string[] = [];
+    for await (const entry of (folderHandle as any).values()) {
+      if (entry.kind === 'file') {
+        const name = entry.name as string;
+        if (name.endsWith('.flashlocal') || name.endsWith('.json') || name.endsWith('.csv') || name.endsWith('.tsv')) {
+          files.push(name);
+        }
+      }
+    }
+    folderFiles = files.sort();
+  }
+
+  async function importFromFolder(fileName: string) {
+    if (!folderHandle) return;
+    importing = true;
+    try {
+      const fileHandle = await folderHandle.getFileHandle(fileName);
+      const file = await fileHandle.getFile();
+      const text = await file.text();
+
+      if (fileName.endsWith('.flashlocal') || fileName.endsWith('.json')) {
+        const data = JSON.parse(text);
+        if (data.app === 'FlashLocal') {
+          const result = await importFlashLocal(data as FlashLocalFile);
+          showToast(`Imported ${result.decks} deck(s), ${result.cards} cards`, 'success');
+        } else {
+          const result = await importJSON(text, deckNameForImport);
+          showToast(`Imported ${result.cards} cards`, 'success');
+        }
+      } else {
+        const result = await importCSV(text, deckNameForImport);
+        showToast(`Imported ${result.cards} cards`, 'success');
+      }
+      decks = await db.decks.toArray();
+    } catch (e: any) {
+      showToast(e.message || 'Import failed', 'error');
+    } finally {
+      importing = false;
+    }
+  }
 
   async function handleFileImport(event: Event) {
     const input = event.target as HTMLInputElement;
@@ -105,6 +169,41 @@
   <hr />
 
   <section>
+    <h2>Local Folder</h2>
+    {#if folderSupported}
+      <p class="hint">Pick a folder on your device to read .flashlocal, .json, .csv, and .tsv files directly.</p>
+      <div class="folder-row">
+        <button class="btn btn-secondary" onclick={pickFolder}>
+          📁 {folderHandle ? 'Change Folder' : 'Select Folder'}
+        </button>
+        {#if folderHandle}
+          <span class="folder-name">📂 {folderName}</span>
+          <button class="btn btn-ghost btn-sm" onclick={scanFolder}>↻ Refresh</button>
+        {/if}
+      </div>
+
+      {#if folderFiles.length > 0}
+        <div class="folder-files">
+          {#each folderFiles as file}
+            <div class="folder-file">
+              <span class="file-name">{file}</span>
+              <button class="btn btn-primary btn-sm" onclick={() => importFromFolder(file)} disabled={importing}>
+                Import
+              </button>
+            </div>
+          {/each}
+        </div>
+      {:else if folderHandle}
+        <p class="hint">No supported files found in this folder.</p>
+      {/if}
+    {:else}
+      <p class="hint">Folder access is available on desktop browsers (Chrome, Edge). On mobile, use the file import above.</p>
+    {/if}
+  </section>
+
+  <hr />
+
+  <section>
     <h2>Export</h2>
     {#if decks.length === 0}
       <p class="hint">No decks to export. Create some cards first!</p>
@@ -157,4 +256,39 @@
   }
   .deck-option:hover { background: var(--color-surface); }
   .export-actions { display: flex; justify-content: flex-end; }
+
+  .folder-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .folder-name {
+    font-size: 0.85rem;
+    color: var(--color-primary);
+  }
+
+  .folder-files {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .folder-file {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.4rem 0.6rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+  }
+
+  .file-name {
+    font-size: 0.85rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 </style>

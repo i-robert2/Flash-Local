@@ -10,6 +10,25 @@
   let showNewDeck = $state(false);
   let newDeckName = $state('');
   let loading = $state(true);
+  let search = $state('');
+
+  let filteredDecks = $derived(
+    search.trim()
+      ? decks.filter(d =>
+          d.name.toLowerCase().includes(search.toLowerCase()) ||
+          d.description.toLowerCase().includes(search.toLowerCase())
+        )
+      : decks
+  );
+
+  // Favorites first, then by modified date
+  let sortedDecks = $derived(
+    [...filteredDecks].sort((a, b) => {
+      if (a.favorite && !b.favorite) return -1;
+      if (!a.favorite && b.favorite) return 1;
+      return b.modified - a.modified;
+    })
+  );
 
   onMount(loadDecks);
 
@@ -19,8 +38,16 @@
     const withStats = await Promise.all(
       allDecks.map(async (d) => ({ ...d, stats: await getDeckStats(d.id) })),
     );
-    decks = withStats.sort((a, b) => b.modified - a.modified);
+    decks = withStats;
     loading = false;
+  }
+
+  async function toggleFavorite(deck: DeckWithStats, event: Event) {
+    event.stopPropagation();
+    const newVal = !deck.favorite;
+    await db.decks.update(deck.id, { favorite: newVal });
+    deck.favorite = newVal;
+    decks = [...decks]; // trigger reactivity
   }
 
   async function createDeck() {
@@ -77,6 +104,10 @@
     </div>
   {/if}
 
+  {#if decks.length > 0}
+    <input type="search" bind:value={search} placeholder="Search decks…" />
+  {/if}
+
   {#if loading}
     <p class="empty">Loading...</p>
   {:else if decks.length === 0}
@@ -84,10 +115,17 @@
       <p>No decks yet</p>
       <p class="hint">Create a new deck or import cards to get started.</p>
     </div>
+  {:else if sortedDecks.length === 0}
+    <div class="empty-state">
+      <p>No decks match your search.</p>
+    </div>
   {:else}
     <div class="decks">
-      {#each decks as deck (deck.id)}
+      {#each sortedDecks as deck (deck.id)}
         <div class="deck-card" role="button" tabindex="0" onclick={() => navigate(`/deck/${deck.id}`)} onkeydown={(e) => e.key === 'Enter' && navigate(`/deck/${deck.id}`)}>
+          <button class="fav-btn" onclick={(e) => toggleFavorite(deck, e)} title={deck.favorite ? 'Remove from favorites' : 'Add to favorites'}>
+            {deck.favorite ? '★' : '☆'}
+          </button>
           <div class="deck-info">
             <h3>{deck.name}</h3>
             <span class="deck-count">{deck.stats.total} cards</span>
@@ -183,6 +221,17 @@
   :global([data-theme="dark"]) .stat-done { background: #064E3B; color: #6EE7B7; }
 
   .deck-actions { display: flex; gap: 0.5rem; align-items: center; flex-shrink: 0; }
+
+  .fav-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1.2rem;
+    color: var(--color-warning);
+    padding: 0.2rem;
+    flex-shrink: 0;
+    line-height: 1;
+  }
 
   .empty-state {
     text-align: center;
