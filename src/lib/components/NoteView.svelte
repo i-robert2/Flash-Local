@@ -3,6 +3,7 @@
   import { navigate, showToast } from '../stores';
   import type { Note } from '../core/types';
   import { depthLabel, depthColor as getDepthColor } from '../core/types';
+  import { mapRenderedToRaw } from '../core/cursorMap';
   import CardContent from './CardContent.svelte';
 
   interface Props {
@@ -50,34 +51,25 @@
       }
 
       if (caretNode && contentBodyEl.contains(caretNode)) {
-        // Step 1: Find which block element (p, h1-h6, li, pre) the click is in
-        let blockEl: HTMLElement | null = caretNode.nodeType === Node.TEXT_NODE
-          ? caretNode.parentElement : caretNode as HTMLElement;
-        while (blockEl && blockEl !== contentBodyEl) {
-          const display = getComputedStyle(blockEl).display;
-          if (display === 'block' || display === 'list-item') break;
+        // Step 1: Find which top-level block element contains the click
+        let blockEl: Element | null = caretNode.nodeType === Node.TEXT_NODE
+          ? caretNode.parentElement : caretNode as Element;
+        // Walk up to find the direct child of contentBodyEl
+        while (blockEl && blockEl.parentElement !== contentBodyEl) {
           blockEl = blockEl.parentElement;
         }
-        if (!blockEl || blockEl === contentBodyEl) blockEl = contentBodyEl.firstElementChild as HTMLElement;
-
-        // Step 2: Count which block index (0-based) this is among content-body's block children
-        const blocks = Array.from(contentBodyEl.querySelectorAll(':scope > *'));
-        let blockIndex = blocks.indexOf(blockEl);
-        if (blockIndex === -1) {
-          // The click might be in a nested element — find the top-level ancestor
-          let ancestor: HTMLElement | null = blockEl;
-          while (ancestor && ancestor.parentElement !== contentBodyEl) {
-            ancestor = ancestor.parentElement;
-          }
-          if (ancestor) blockIndex = blocks.indexOf(ancestor);
+        if (!blockEl || !contentBodyEl.contains(blockEl)) {
+          blockEl = contentBodyEl.firstElementChild;
         }
-        if (blockIndex === -1) blockIndex = 0;
+
+        // Step 2: Count which block index this is
+        const blocks = Array.from(contentBodyEl.children);
+        const blockIndex = Math.max(0, blocks.indexOf(blockEl!));
 
         // Step 3: Get character offset within this block's text
-        const blockText = blocks[blockIndex]?.textContent ?? '';
         let inBlockOffset = 0;
-        if (caretNode.nodeType === Node.TEXT_NODE) {
-          const blockWalker = document.createTreeWalker(blocks[blockIndex], NodeFilter.SHOW_TEXT);
+        if (caretNode.nodeType === Node.TEXT_NODE && blockEl) {
+          const blockWalker = document.createTreeWalker(blockEl, NodeFilter.SHOW_TEXT);
           let tn: Node | null;
           while ((tn = blockWalker.nextNode())) {
             if (tn === caretNode) {
@@ -88,57 +80,8 @@
           }
         }
 
-        // Step 4: Split raw markdown into blocks (separated by blank lines)
-        // and filter out image-only blocks
-        const raw = note.content;
-        const rawBlocks: { text: string; start: number }[] = [];
-        let pos = 0;
-        for (const part of raw.split(/\n\n+/)) {
-          const trimmed = part.replace(/!\[[^\]]*\]\([^)]*\)/g, '').trim();
-          // Only count blocks that have visible text (skip image-only blocks)
-          if (trimmed.length > 0 || part.trim().length === 0) {
-            rawBlocks.push({ text: part, start: pos });
-          }
-          pos += part.length;
-          // Account for the \n\n separator
-          const sepMatch = raw.slice(pos).match(/^\n\n+/);
-          if (sepMatch) pos += sepMatch[0].length;
-        }
-
-        // Step 5: Map block index to raw position
-        const targetBlock = rawBlocks[Math.min(blockIndex, rawBlocks.length - 1)];
-        if (targetBlock) {
-          // Strip markdown syntax from the raw block to get plain text for offset mapping
-          const rawBlockText = targetBlock.text;
-          const plainBlock = rawBlockText.replace(/!\[[^\]]*\]\([^)]*\)/g, '');
-
-          // Clamp the offset — the plain text may differ slightly from rendered text
-          const clampedOffset = Math.min(inBlockOffset, rawBlockText.length);
-
-          // Map plain-text offset to raw offset (accounting for removed image syntax)
-          let rawCharIdx = 0;
-          let plainCharIdx = 0;
-          const imgRanges: [number, number][] = [];
-          const imgRe = /!\[[^\]]*\]\([^)]*\)/g;
-          let im: RegExpExecArray | null;
-          while ((im = imgRe.exec(rawBlockText)) !== null) {
-            imgRanges.push([im.index, im.index + im[0].length]);
-          }
-
-          let rawOff = 0;
-          let visibleCount = 0;
-          while (rawOff < rawBlockText.length && visibleCount < clampedOffset) {
-            const skip = imgRanges.find(([s, e]) => rawOff >= s && rawOff < e);
-            if (skip) {
-              rawOff = skip[1];
-              continue;
-            }
-            visibleCount++;
-            rawOff++;
-          }
-
-          clickOffset = targetBlock.start + rawOff;
-        }
+        // Step 4: Use the tested pure function to map to raw offset
+        clickOffset = mapRenderedToRaw(note.content, blockIndex, inBlockOffset);
       }
     }
 
