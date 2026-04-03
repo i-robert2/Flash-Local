@@ -51,19 +51,24 @@
       }
 
       if (caretNode && contentBodyEl.contains(caretNode)) {
-        // Step 1: Find which top-level block element contains the click
+        // The DOM structure is: .content-body > .card-content > <p>, <p>, ...
+        // We need the <p> (or h1, pre, etc) elements inside .card-content
+        const cardContent = contentBodyEl.querySelector('.card-content');
+        const blockContainer = cardContent ?? contentBodyEl;
+        const blocks = Array.from(blockContainer.children);
+
+        // Step 1: Find which block element (p, h1, etc) contains the click
         let blockEl: Element | null = caretNode.nodeType === Node.TEXT_NODE
           ? caretNode.parentElement : caretNode as Element;
-        // Walk up to find the direct child of contentBodyEl
-        while (blockEl && blockEl.parentElement !== contentBodyEl) {
+        // Walk up to find the direct child of blockContainer
+        while (blockEl && blockEl.parentElement !== blockContainer) {
           blockEl = blockEl.parentElement;
         }
-        if (!blockEl || !contentBodyEl.contains(blockEl)) {
-          blockEl = contentBodyEl.firstElementChild;
+        if (!blockEl || !blockContainer.contains(blockEl)) {
+          blockEl = blocks[0] ?? null;
         }
 
         // Step 2: Count which block index this is
-        const blocks = Array.from(contentBodyEl.children);
         const blockIndex = Math.max(0, blocks.indexOf(blockEl!));
 
         // Step 3: Get character offset within this block's text
