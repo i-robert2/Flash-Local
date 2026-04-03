@@ -162,6 +162,8 @@
   async function removeSelectedLinks() {
     if (!cy) return;
     const selectedEdges = cy.$('edge:selected');
+    if (selectedEdges.length === 0) return;
+    if (!confirm(`Remove ${selectedEdges.length} link(s)?`)) return;
     for (const edge of selectedEdges.toArray()) await db.noteLinks.delete(edge.id());
     if (selectedEdges.length) {
       showToast('Link removed', 'success');

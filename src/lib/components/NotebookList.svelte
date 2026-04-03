@@ -64,6 +64,8 @@
   }
 
   async function deleteNotebook(id: string) {
+    const nb = notebooks.find(n => n.id === id);
+    if (!confirm(`Delete "${nb?.name ?? 'this notebook'}" and all its notes?`)) return;
     const noteIds = await db.notes.where('notebookId').equals(id).primaryKeys();
     for (const nid of noteIds) {
       await db.noteLinks.where('sourceId').equals(nid).delete();

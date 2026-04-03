@@ -177,6 +177,7 @@
 
   async function deleteNote() {
     if (!note) return;
+    if (!confirm(`Delete "${note.title}"? Children will be moved up one level.`)) return;
     const children = await db.notes.where('parentId').equals(note.id).toArray();
     for (const child of children) {
       await db.notes.update(child.id, { parentId: note.parentId, depth: Math.max(0, child.depth - 1) });

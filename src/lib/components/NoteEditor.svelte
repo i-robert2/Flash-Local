@@ -112,6 +112,7 @@
 
   async function deleteNote() {
     if (!noteId) return;
+    if (!confirm('Delete this note? Children will be moved up one level.')) return;
     // Reparent children to this note's parent
     const children = await db.notes.where('parentId').equals(noteId).toArray();
     for (const child of children) {
