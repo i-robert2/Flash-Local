@@ -1,10 +1,12 @@
 import Dexie, { type Table } from 'dexie';
-import type { Card, Deck, ReviewLog, AppSettings } from './types';
+import type { Card, Deck, ReviewLog, AppSettings, Note, NoteLink } from './types';
 
 class FlashLocalDB extends Dexie {
   cards!: Table<Card, string>;
   decks!: Table<Deck, string>;
   reviewLogs!: Table<ReviewLog, string>;
+  notes!: Table<Note, string>;
+  noteLinks!: Table<NoteLink, string>;
 
   constructor() {
     super('flashlocal');
@@ -12,6 +14,13 @@ class FlashLocalDB extends Dexie {
       cards: 'id, deckId, due, *tags',
       decks: 'id',
       reviewLogs: 'id, cardId, deckId, timestamp',
+    });
+    this.version(2).stores({
+      cards: 'id, deckId, due, *tags',
+      decks: 'id',
+      reviewLogs: 'id, cardId, deckId, timestamp',
+      notes: 'id, *tags, modified',
+      noteLinks: 'id, sourceId, targetId',
     });
   }
 }

@@ -10,7 +10,10 @@ export type Route =
   | { page: 'deck'; deckId: string }
   | { page: 'card'; deckId: string; cardId?: string }
   | { page: 'import' }
-  | { page: 'settings' };
+  | { page: 'settings' }
+  | { page: 'notes' }
+  | { page: 'note'; noteId?: string }
+  | { page: 'knowledge-map' };
 
 function parseHash(): Route {
   const hash = window.location.hash.slice(1) || '/';
@@ -24,6 +27,9 @@ function parseHash(): Route {
     return { page: 'card', deckId: parts[1], cardId: parts[2] };
   if (parts[0] === 'import') return { page: 'import' };
   if (parts[0] === 'settings') return { page: 'settings' };
+  if (parts[0] === 'notes') return { page: 'notes' };
+  if (parts[0] === 'note') return { page: 'note', noteId: parts[1] };
+  if (parts[0] === 'knowledge-map') return { page: 'knowledge-map' };
   return { page: 'home' };
 }
 

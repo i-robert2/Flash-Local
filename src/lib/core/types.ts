@@ -91,3 +91,25 @@ export interface FlashLocalCard {
     lastReview?: string | null;
   };
 }
+
+// ── Notes & Knowledge Maps ────────────────────────────────────
+
+export interface Note {
+  id: string;
+  title: string;
+  content: string;             // Markdown
+  tags: string[];
+  created: number;
+  modified: number;
+  /** Position on the knowledge map canvas */
+  mapX?: number;
+  mapY?: number;
+}
+
+export interface NoteLink {
+  id: string;
+  sourceId: string;
+  targetId: string;
+  label?: string;
+  created: number;
+}

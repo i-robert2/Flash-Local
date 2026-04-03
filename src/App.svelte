@@ -8,12 +8,15 @@
   import Settings from './lib/components/Settings.svelte';
   import Header from './lib/components/Header.svelte';
   import Toast from './lib/components/Toast.svelte';
+  import NoteList from './lib/components/NoteList.svelte';
+  import NoteEditor from './lib/components/NoteEditor.svelte';
+  import KnowledgeMap from './lib/components/KnowledgeMap.svelte';
 </script>
 
 <div class="app">
   <Header />
 
-  <main class="main">
+  <main class="main" class:main-full={$route.page === 'knowledge-map'}>
     {#if $route.page === 'home'}
       <DeckList />
     {:else if $route.page === 'study'}
@@ -26,6 +29,12 @@
       <ImportExport />
     {:else if $route.page === 'settings'}
       <Settings />
+    {:else if $route.page === 'notes'}
+      <NoteList />
+    {:else if $route.page === 'note'}
+      <NoteEditor noteId={$route.noteId} />
+    {:else if $route.page === 'knowledge-map'}
+      <KnowledgeMap />
     {/if}
   </main>
 
@@ -53,6 +62,10 @@
     margin: 0 auto;
     width: 100%;
     box-sizing: border-box;
+  }
+
+  .main-full {
+    max-width: 100%;
   }
 
   .toast-container {
