@@ -159,18 +159,12 @@
     await loadData();
   }
 
-  async function deleteSelected() {
+  async function removeSelectedLinks() {
     if (!cy) return;
     const selectedEdges = cy.$('edge:selected');
-    const selectedNodes = cy.$('node:selected');
     for (const edge of selectedEdges.toArray()) await db.noteLinks.delete(edge.id());
-    for (const node of selectedNodes.toArray()) {
-      await db.noteLinks.where('sourceId').equals(node.id()).delete();
-      await db.noteLinks.where('targetId').equals(node.id()).delete();
-      await db.notes.delete(node.id());
-    }
-    if (selectedEdges.length || selectedNodes.length) {
-      showToast('Deleted selected items', 'success');
+    if (selectedEdges.length) {
+      showToast('Link removed', 'success');
       await loadData();
     }
   }
@@ -188,7 +182,7 @@
       <button class="btn btn-sm" class:btn-primary={linkMode} class:btn-secondary={!linkMode} onclick={toggleLinkMode}>
         {linkMode ? '✕ Cancel Link' : '🔗 Link Notes'}
       </button>
-      <button class="btn btn-danger-ghost btn-sm" onclick={deleteSelected} title="Delete selected">🗑</button>
+      <button class="btn btn-secondary btn-sm" onclick={removeSelectedLinks} title="Remove selected link">✂ Unlink</button>
       <span class="separator"></span>
       <button class="btn btn-ghost btn-sm" onclick={zoomOut} title="Zoom out">−</button>
       <span class="zoom-label">{Math.round(zoomLevel * 100)}%</span>
@@ -217,7 +211,7 @@
   </div>
 
   <div class="hint">
-    Scroll to zoom · Drag nodes to rearrange · Double-click to view · Select + 🗑 to delete
+    Scroll to zoom · Drag nodes to rearrange · Double-click to view · Select link + ✂ to unlink
   </div>
 </div>
 
