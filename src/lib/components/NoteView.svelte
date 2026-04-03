@@ -98,9 +98,8 @@
           }
 
           // If we landed in whitespace/newlines between paragraphs,
-          // skip forward to the next content char — but only if the
-          // character we're on is actually a newline (not mid-word).
-          if (strippedIdx < stripped.length && stripped[strippedIdx] === '\n') {
+          // only skip if we didn't consume any rendered text (empty click)
+          if (renderedIdx === 0 && strippedIdx < stripped.length && stripped[strippedIdx] === '\n') {
             while (strippedIdx < stripped.length && (stripped[strippedIdx] === '\n' || stripped[strippedIdx] === '\r')) {
               strippedIdx++;
             }
