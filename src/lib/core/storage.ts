@@ -1,10 +1,11 @@
 import Dexie, { type Table } from 'dexie';
-import type { Card, Deck, ReviewLog, AppSettings, Note, NoteLink } from './types';
+import type { Card, Deck, ReviewLog, AppSettings, Notebook, Note, NoteLink } from './types';
 
 class FlashLocalDB extends Dexie {
   cards!: Table<Card, string>;
   decks!: Table<Deck, string>;
   reviewLogs!: Table<ReviewLog, string>;
+  notebooks!: Table<Notebook, string>;
   notes!: Table<Note, string>;
   noteLinks!: Table<NoteLink, string>;
 
@@ -21,6 +22,23 @@ class FlashLocalDB extends Dexie {
       reviewLogs: 'id, cardId, deckId, timestamp',
       notes: 'id, *tags, modified',
       noteLinks: 'id, sourceId, targetId',
+    });
+    this.version(3).stores({
+      cards: 'id, deckId, due, *tags',
+      decks: 'id',
+      reviewLogs: 'id, cardId, deckId, timestamp',
+      notebooks: 'id',
+      notes: 'id, notebookId, parentId, depth, *tags, modified',
+      noteLinks: 'id, sourceId, targetId',
+    }).upgrade(tx => {
+      // Migrate existing notes: assign to a default notebook
+      return tx.table('notes').toCollection().modify(note => {
+        if (!note.notebookId) {
+          note.notebookId = '__default__';
+          note.parentId = null;
+          note.depth = 0;
+        }
+      });
     });
   }
 }

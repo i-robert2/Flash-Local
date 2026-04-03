@@ -11,13 +11,16 @@ export type Route =
   | { page: 'card'; deckId: string; cardId?: string }
   | { page: 'import' }
   | { page: 'settings' }
-  | { page: 'notes' }
-  | { page: 'note'; noteId?: string }
-  | { page: 'knowledge-map' };
+  | { page: 'notebooks' }
+  | { page: 'notebook'; notebookId: string }
+  | { page: 'note'; notebookId: string; noteId?: string }
+  | { page: 'note-view'; notebookId: string; noteId: string }
+  | { page: 'knowledge-map'; notebookId: string };
 
 function parseHash(): Route {
-  const hash = window.location.hash.slice(1) || '/';
-  const parts = hash.split('/').filter(Boolean);
+  const raw = window.location.hash.slice(1) || '/';
+  const hashPath = raw.split('?')[0]; // strip query params
+  const parts = hashPath.split('/').filter(Boolean);
 
   if (parts[0] === 'study' && parts[1])
     return { page: 'study', deckId: parts[1] };
@@ -27,9 +30,20 @@ function parseHash(): Route {
     return { page: 'card', deckId: parts[1], cardId: parts[2] };
   if (parts[0] === 'import') return { page: 'import' };
   if (parts[0] === 'settings') return { page: 'settings' };
-  if (parts[0] === 'notes') return { page: 'notes' };
-  if (parts[0] === 'note') return { page: 'note', noteId: parts[1] };
-  if (parts[0] === 'knowledge-map') return { page: 'knowledge-map' };
+  if (parts[0] === 'notebooks') return { page: 'notebooks' };
+  if (parts[0] === 'notebook' && parts[1] && parts[2] === 'map')
+    return { page: 'knowledge-map', notebookId: parts[1] };
+  if (parts[0] === 'notebook' && parts[1] && parts[2] === 'note' && parts[3] === 'new')
+    return { page: 'note', notebookId: parts[1] };
+  if (parts[0] === 'notebook' && parts[1] && parts[2] === 'note' && parts[3] && parts[4] === 'edit')
+    return { page: 'note', notebookId: parts[1], noteId: parts[3] };
+  if (parts[0] === 'notebook' && parts[1] && parts[2] === 'note' && parts[3])
+    return { page: 'note-view', notebookId: parts[1], noteId: parts[3] };
+  if (parts[0] === 'notebook' && parts[1])
+    return { page: 'notebook', notebookId: parts[1] };
+  // Legacy routes
+  if (parts[0] === 'notes') return { page: 'notebooks' };
+  if (parts[0] === 'knowledge-map') return { page: 'notebooks' };
   return { page: 'home' };
 }
 

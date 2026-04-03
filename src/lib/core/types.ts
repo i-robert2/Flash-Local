@@ -94,10 +94,39 @@ export interface FlashLocalCard {
 
 // ── Notes & Knowledge Maps ────────────────────────────────────
 
+/** Human-readable label for a given hierarchy depth */
+export function depthLabel(depth: number): string {
+  if (depth === 0) return 'Chapter';
+  if (depth === 1) return 'Sub-chapter';
+  return `Sub×${depth}-chapter`;
+}
+
+const COLOR_PALETTE = {
+  light: ['#4F46E5', '#0EA5E9', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6'],
+  dark:  ['#818CF8', '#38BDF8', '#34D399', '#FBBF24', '#F87171', '#A78BFA', '#F472B6', '#2DD4BF'],
+};
+
+/** Color for a given depth, cycling through the palette */
+export function depthColor(depth: number, theme: 'light' | 'dark' = 'light'): string {
+  const palette = COLOR_PALETTE[theme];
+  return palette[depth % palette.length];
+}
+
+export interface Notebook {
+  id: string;
+  name: string;
+  description: string;
+  created: number;
+  modified: number;
+}
+
 export interface Note {
   id: string;
+  notebookId: string;
+  parentId: string | null;      // null = top-level (chapter)
+  depth: number;
   title: string;
-  content: string;             // Markdown
+  content: string;              // Markdown
   tags: string[];
   created: number;
   modified: number;

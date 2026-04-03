@@ -2,20 +2,35 @@
   import { db } from '../core/storage';
   import { navigate, showToast } from '../stores';
   import type { Note } from '../core/types';
+  import { depthLabel } from '../core/types';
   import CardContent from './CardContent.svelte';
 
   interface Props {
+    notebookId: string;
     noteId?: string;
   }
 
-  let { noteId }: Props = $props();
+  let { notebookId, noteId }: Props = $props();
 
   let title = $state('');
   let content = $state('');
   let tagsInput = $state('');
+  let depth = $state(0);
+  let parentId = $state<string | null>(null);
   let saving = $state(false);
   let previewing = $state(false);
   let loaded = $state(false);
+  let textareaEl: HTMLTextAreaElement;
+  let fileInputEl: HTMLInputElement;
+
+  // Read cursor position from URL query param (passed from NoteView on double-click)
+  function getCursorParam(): number {
+    const hash = window.location.hash;
+    const match = hash.match(/[?&]cursor=(\d+)/);
+    return match ? parseInt(match[1], 10) : -1;
+  }
+
+  const initialCursor = getCursorParam();
 
   $effect(() => {
     if (noteId) {
@@ -24,8 +39,28 @@
           title = note.title;
           content = note.content;
           tagsInput = note.tags.join(', ');
+          depth = note.depth;
+          parentId = note.parentId;
         }
         loaded = true;
+        // Place cursor at the position from NoteView
+        if (initialCursor >= 0) {
+          requestAnimationFrame(() => {
+            if (textareaEl) {
+              const pos = Math.min(initialCursor, content.length);
+              textareaEl.focus();
+              textareaEl.setSelectionRange(pos, pos);
+
+              // Scroll textarea so the cursor line is visible near the middle
+              // Estimate the line the cursor is on
+              const textBefore = content.slice(0, pos);
+              const linesBefore = textBefore.split('\n').length;
+              const lineHeight = parseFloat(getComputedStyle(textareaEl).lineHeight) || 24;
+              const targetScroll = (linesBefore * lineHeight) - (textareaEl.clientHeight / 2);
+              textareaEl.scrollTop = Math.max(0, targetScroll);
+            }
+          });
+        }
       });
     } else {
       loaded = true;
@@ -58,6 +93,9 @@
       const id = crypto.randomUUID();
       const note: Note = {
         id,
+        notebookId,
+        parentId,
+        depth,
         title: title.trim(),
         content,
         tags,
@@ -65,20 +103,54 @@
         modified: now,
       };
       await db.notes.add(note);
+      noteId = id;
       showToast('Note created', 'success');
     }
     saving = false;
-    navigate('/notes');
+    navigate(`/notebook/${notebookId}/note/${noteId}`);
   }
 
   async function deleteNote() {
     if (!noteId) return;
-    // Remove links referencing this note
+    // Reparent children to this note's parent
+    const children = await db.notes.where('parentId').equals(noteId).toArray();
+    for (const child of children) {
+      await db.notes.update(child.id, { parentId, depth: Math.max(0, child.depth - 1) });
+    }
     await db.noteLinks.where('sourceId').equals(noteId).delete();
     await db.noteLinks.where('targetId').equals(noteId).delete();
     await db.notes.delete(noteId);
     showToast('Note deleted', 'success');
-    navigate('/notes');
+    navigate(`/notebook/${notebookId}`);  
+  }
+
+  function insertImage() {
+    fileInputEl.click();
+  }
+
+  function handleImageUpload(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      showToast('Please select an image file', 'error');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUri = reader.result as string;
+      const markdown = `![${file.name}](${dataUri})`;
+      if (textareaEl) {
+        const start = textareaEl.selectionStart;
+        const end = textareaEl.selectionEnd;
+        content = content.slice(0, start) + markdown + content.slice(end);
+      } else {
+        content += '\n' + markdown;
+      }
+      showToast('Image inserted', 'success');
+    };
+    reader.readAsDataURL(file);
+    input.value = '';
   }
 </script>
 
@@ -94,16 +166,22 @@
     <div class="field">
       <div class="label-row">
         <span class="label">Content (Markdown)</span>
-        <button class="btn btn-ghost btn-sm" onclick={() => previewing = !previewing}>
-          {previewing ? 'Edit' : 'Preview'}
-        </button>
+        <div class="label-actions">
+          <button class="btn btn-ghost btn-sm" onclick={insertImage} title="Insert image">
+            🖼 Image
+          </button>
+          <button class="btn btn-ghost btn-sm" onclick={() => previewing = !previewing}>
+            {previewing ? 'Edit' : 'Preview'}
+          </button>
+        </div>
       </div>
+      <input type="file" accept="image/*" bind:this={fileInputEl} onchange={handleImageUpload} hidden />
       {#if previewing}
         <div class="preview-box">
-          <CardContent text={content} />
+          <CardContent content={content} />
         </div>
       {:else}
-        <textarea bind:value={content} rows={12} placeholder="Write your note in Markdown…"></textarea>
+        <textarea bind:this={textareaEl} bind:value={content} rows={20} placeholder="Write your note in Markdown…"></textarea>
       {/if}
     </div>
 
@@ -116,7 +194,7 @@
       <button class="btn btn-primary" onclick={save} disabled={saving}>
         {saving ? 'Saving…' : noteId ? 'Save Changes' : 'Create Note'}
       </button>
-      <button class="btn btn-secondary" onclick={() => navigate('/notes')}>Cancel</button>
+      <button class="btn btn-secondary" onclick={() => navigate(noteId ? `/notebook/${notebookId}/note/${noteId}` : `/notebook/${notebookId}`)}>Cancel</button>
       {#if noteId}
         <button class="btn btn-danger-ghost" onclick={deleteNote}>Delete</button>
       {/if}
@@ -154,8 +232,14 @@
     justify-content: space-between;
   }
 
+  .label-actions {
+    display: flex;
+    gap: 0.25rem;
+  }
+
   textarea {
     resize: vertical;
+    min-height: 10rem;
     font-family: 'JetBrains Mono', 'Fira Code', monospace;
     font-size: 0.9rem;
     line-height: 1.6;
