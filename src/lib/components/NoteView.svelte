@@ -45,18 +45,24 @@
         const nodeOffset = range.startOffset;
 
         if (clickNode.nodeType === Node.TEXT_NODE) {
-          const clickText = clickNode.textContent || '';
-          // Grab text around the click point for context
-          const ctxBefore = clickText.slice(Math.max(0, nodeOffset - 40), nodeOffset);
-          const ctxAfter = clickText.slice(nodeOffset, nodeOffset + 40);
+          // Collect all rendered text BEFORE the click point
+          const walker = document.createTreeWalker(contentBodyEl, NodeFilter.SHOW_TEXT);
+          let precedingText = '';
+          let node: Node | null;
+          while ((node = walker.nextNode())) {
+            if (node === clickNode) {
+              precedingText += clickNode.textContent!.slice(0, nodeOffset);
+              break;
+            }
+            precedingText += node.textContent ?? '';
+          }
 
           const raw = note.content;
 
-          // Build a stripped version of the raw markdown without image syntax,
-          // and a mapping from stripped positions back to raw positions.
+          // Strip image markdown syntax, build position map
           const imgRe = /!\[[^\]]*\]\([^)]*\)/g;
           let stripped = '';
-          const posMap: number[] = []; // posMap[strippedIdx] = rawIdx
+          const posMap: number[] = [];
           let lastEnd = 0;
           let m: RegExpExecArray | null;
           while ((m = imgRe.exec(raw)) !== null) {
@@ -71,23 +77,22 @@
             stripped += raw[i];
           }
 
-          // Try progressively shorter snippets to find a match
-          const snippets = [
-            { before: ctxBefore, after: ctxAfter },
-            { before: ctxBefore.slice(-20), after: ctxAfter.slice(0, 20) },
-            { before: ctxBefore.slice(-10), after: ctxAfter.slice(0, 10) },
-          ];
-
-          for (const { before, after } of snippets) {
-            const snippet = before + after;
-            if (snippet.length === 0) continue;
-            const idx = stripped.indexOf(snippet);
-            if (idx !== -1) {
-              const strippedPos = idx + before.length;
-              clickOffset = strippedPos < posMap.length ? posMap[strippedPos] : raw.length;
-              break;
+          // Now find where precedingText ends in the stripped markdown.
+          // The rendered text may differ from markdown (headers, bold, etc),
+          // so match greedily: walk both strings and count matching chars.
+          let strippedIdx = 0;
+          let renderedIdx = 0;
+          while (renderedIdx < precedingText.length && strippedIdx < stripped.length) {
+            if (precedingText[renderedIdx] === stripped[strippedIdx]) {
+              renderedIdx++;
+              strippedIdx++;
+            } else {
+              // Skip non-matching chars in stripped (markdown syntax like #, *, etc.)
+              strippedIdx++;
             }
           }
+
+          clickOffset = strippedIdx < posMap.length ? posMap[strippedIdx] : raw.length;
         }
       }
     }
