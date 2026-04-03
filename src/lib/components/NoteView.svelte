@@ -45,13 +45,18 @@
         const nodeOffset = range.startOffset;
 
         if (clickNode.nodeType === Node.TEXT_NODE) {
-          // Collect all rendered text BEFORE the click point
+          // Collect all rendered text BEFORE the click point.
+          // Double-click selects a word, so use the END of the selection
+          // to place the cursor after the clicked word.
+          const endNode = range.endContainer;
+          const endOffset = range.endOffset;
+
           const walker = document.createTreeWalker(contentBodyEl, NodeFilter.SHOW_TEXT);
           let precedingText = '';
           let node: Node | null;
           while ((node = walker.nextNode())) {
-            if (node === clickNode) {
-              precedingText += clickNode.textContent!.slice(0, nodeOffset);
+            if (node === endNode) {
+              precedingText += endNode.textContent!.slice(0, endOffset);
               break;
             }
             precedingText += node.textContent ?? '';
