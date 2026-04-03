@@ -364,4 +364,10 @@
     color: var(--color-text-secondary);
     padding: 3rem 1rem;
   }
+
+  @media (max-width: 640px) {
+    .note-header { flex-direction: column; gap: 0.5rem; }
+    .actions { align-self: flex-end; }
+    h2 { font-size: 1.25rem; }
+  }
 </style>

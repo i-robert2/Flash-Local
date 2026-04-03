@@ -25,6 +25,13 @@
   );
 
   let hasNotebookSidebar = $derived(!!activeNotebookId);
+  let sidebarOpen = $state(false);
+
+  // Close sidebar on route change (mobile)
+  $effect(() => {
+    $route; // subscribe
+    sidebarOpen = false;
+  });
 </script>
 
 <div class="app">
@@ -32,8 +39,16 @@
 
   {#if hasNotebookSidebar}
     <div class="notebook-layout">
-      <NotebookSidebar notebookId={activeNotebookId} />
+      <div class="sidebar-wrap" class:sidebar-open={sidebarOpen}>
+        <NotebookSidebar notebookId={activeNotebookId} />
+      </div>
+      {#if sidebarOpen}
+        <button class="sidebar-backdrop" onclick={() => sidebarOpen = false} aria-label="Close sidebar"></button>
+      {/if}
       <main class="main notebook-main" class:main-full={$route.page === 'knowledge-map'}>
+        <button class="mobile-sidebar-toggle btn btn-ghost btn-sm" onclick={() => sidebarOpen = !sidebarOpen}>
+          ☰
+        </button>
         {#if $route.page === 'notebook'}
           <NoteList notebookId={$route.notebookId} />
         {:else if $route.page === 'note'}
@@ -99,6 +114,19 @@
     display: flex;
     flex: 1;
     overflow: hidden;
+    position: relative;
+  }
+
+  .sidebar-wrap {
+    flex-shrink: 0;
+  }
+
+  .sidebar-backdrop {
+    display: none;
+  }
+
+  .mobile-sidebar-toggle {
+    display: none;
   }
 
   .notebook-main {
@@ -106,6 +134,46 @@
     overflow-y: auto;
     margin: 0;
     max-width: none;
+  }
+
+  /* ── Mobile: sidebar becomes slide-over drawer ── */
+  @media (max-width: 640px) {
+    .sidebar-wrap {
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      z-index: 200;
+      transform: translateX(-100%);
+      transition: transform 0.25s ease;
+    }
+
+    .sidebar-wrap.sidebar-open {
+      transform: translateX(0);
+    }
+
+    .sidebar-backdrop {
+      display: block;
+      position: fixed;
+      inset: 0;
+      z-index: 199;
+      background: rgba(0, 0, 0, 0.4);
+      border: none;
+      cursor: pointer;
+    }
+
+    .mobile-sidebar-toggle {
+      display: inline-flex;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      font-size: 1.2rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .main {
+      padding: 0.75rem;
+    }
   }
 
   .toast-container {

@@ -301,4 +301,13 @@
     color: var(--color-text-secondary);
     text-align: center;
   }
+
+  @media (max-width: 640px) {
+    .knowledge-map { height: calc(100vh - 4rem); height: calc(100dvh - 4rem); }
+    .toolbar { flex-direction: column; align-items: stretch; }
+    .toolbar-actions { justify-content: center; }
+    h2 { font-size: 1rem; text-align: center; }
+    .legend { justify-content: center; font-size: 0.65rem; gap: 0.5rem; }
+    .hint { font-size: 0.65rem; }
+  }
 </style>

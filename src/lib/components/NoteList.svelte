@@ -103,6 +103,12 @@
     gap: 0.75rem;
   }
 
+  @media (max-width: 640px) {
+    .notes-grid { grid-template-columns: 1fr; }
+    .top-row { flex-direction: column; align-items: stretch; }
+    .top-actions { justify-content: flex-end; }
+  }
+
   .note-card {
     display: flex;
     background: var(--color-surface);

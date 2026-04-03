@@ -193,3 +193,28 @@ select:focus {
 body {
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
+
+/* ── Mobile-friendly touch targets ────────────────────────────── */
+
+@media (max-width: 640px) {
+  .btn {
+    min-height: 2.5rem;
+    padding: 0.6rem 1rem;
+    font-size: 0.85rem;
+  }
+
+  .btn-sm {
+    min-height: 2rem;
+    padding: 0.45rem 0.75rem;
+    font-size: 0.8rem;
+  }
+
+  input[type="text"],
+  input[type="search"],
+  input[type="number"],
+  textarea,
+  select {
+    font-size: 1rem; /* prevent iOS zoom on focus */
+    padding: 0.65rem 0.75rem;
+  }
+}

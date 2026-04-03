@@ -134,6 +134,10 @@
     gap: 0.75rem;
   }
 
+  @media (max-width: 640px) {
+    .nb-grid { grid-template-columns: 1fr; }
+  }
+
   .nb-card {
     display: flex;
     background: var(--color-surface);

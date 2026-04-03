@@ -122,6 +122,17 @@
     overflow: hidden;
   }
 
+  @media (max-width: 640px) {
+    .sidebar {
+      width: 80vw;
+      min-width: 80vw;
+      max-width: 20rem;
+      height: 100vh;
+      height: 100dvh;
+      box-shadow: 4px 0 20px rgba(0, 0, 0, 0.3);
+    }
+  }
+
   .sidebar-header {
     padding: 0.75rem;
     border-bottom: 1px solid var(--color-border);

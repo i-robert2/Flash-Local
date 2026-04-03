@@ -73,6 +73,11 @@
     background: none;
   }
 
+  @media (max-width: 640px) {
+    .header-content { padding: 0.5rem 0.75rem; }
+    .logo { font-size: 1.1rem; }
+  }
+
   .back-btn, .nav-btn {
     background: none;
     border: none;

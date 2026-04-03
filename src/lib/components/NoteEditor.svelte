@@ -258,4 +258,11 @@
     gap: 0.5rem;
     flex-wrap: wrap;
   }
+
+  @media (max-width: 640px) {
+    textarea { min-height: 8rem; font-size: 0.85rem; }
+    .label-row { flex-wrap: wrap; gap: 0.3rem; }
+    .actions { gap: 0.4rem; }
+    .actions .btn { flex: 1; min-width: 0; }
+  }
 </style>
