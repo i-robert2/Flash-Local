@@ -3,7 +3,7 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
-  base: '/Flash-Local/',
+  base: process.env.TAURI_ENV_PLATFORM ? '/' : '/Flash-Local/',
   plugins: [
     svelte(),
     VitePWA({
