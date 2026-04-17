@@ -16,8 +16,14 @@
   let collapsed = $state<Set<string>>(new Set());
 
   $effect(() => {
-    db.notebooks.get(notebookId).then(nb => { notebook = nb ?? null; });
-    db.notes.where('notebookId').equals(notebookId).toArray().then(n => { notes = n; });
+    let cancelled = false;
+    db.notebooks.get(notebookId).then(nb => {
+      if (!cancelled) notebook = nb ?? null;
+    });
+    db.notes.where('notebookId').equals(notebookId).toArray().then(n => {
+      if (!cancelled) notes = n;
+    });
+    return () => { cancelled = true; };
   });
 
   function getColor(depth: number): string {

@@ -35,8 +35,13 @@
     const dueCards = await getDueCards(deckId);
     const newCards = await getNewCards(deckId, s.newCardsPerDay);
 
-    // Combine and shuffle
-    cards = [...dueCards, ...newCards].sort(() => Math.random() - 0.5);
+    // Combine, dedup by id (a card could theoretically match both queries), then shuffle
+    const seen = new Set<string>();
+    const combined: Card[] = [];
+    for (const c of [...dueCards, ...newCards]) {
+      if (!seen.has(c.id)) { seen.add(c.id); combined.push(c); }
+    }
+    cards = combined.sort(() => Math.random() - 0.5);
     if (cards.length === 0) finished = true;
   });
 

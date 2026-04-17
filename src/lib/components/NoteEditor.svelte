@@ -34,7 +34,9 @@
 
   $effect(() => {
     if (noteId) {
+      let cancelled = false;
       db.notes.get(noteId).then(note => {
+        if (cancelled) return;
         if (note) {
           title = note.title;
           content = note.content;
@@ -47,21 +49,26 @@
         if (initialCursor >= 0) {
           // Double rAF to ensure Svelte has rendered the textarea
           requestAnimationFrame(() => requestAnimationFrame(() => {
-            if (textareaEl) {
-              const pos = Math.min(initialCursor, content.length);
-              textareaEl.focus();
-              textareaEl.setSelectionRange(pos, pos);
+            if (cancelled || !textareaEl) return;
+            const pos = Math.min(initialCursor, content.length);
+            textareaEl.focus();
+            textareaEl.setSelectionRange(pos, pos);
 
-              // Scroll textarea so the cursor line is visible near the middle
-              const textBefore = content.slice(0, pos);
-              const linesBefore = textBefore.split('\n').length;
-              const lineHeight = parseFloat(getComputedStyle(textareaEl).lineHeight) || 24;
-              const targetScroll = (linesBefore * lineHeight) - (textareaEl.clientHeight / 2);
-              textareaEl.scrollTop = Math.max(0, targetScroll);
-            }
+            // Scroll textarea so the cursor line is visible near the middle
+            const textBefore = content.slice(0, pos);
+            const linesBefore = textBefore.split('\n').length;
+            const lineHeight = parseFloat(getComputedStyle(textareaEl).lineHeight) || 24;
+            const targetScroll = (linesBefore * lineHeight) - (textareaEl.clientHeight / 2);
+            textareaEl.scrollTop = Math.max(0, targetScroll);
           }));
         }
+      }).catch(err => {
+        if (cancelled) return;
+        console.error('Failed to load note', err);
+        showToast('Failed to load note', 'error');
+        loaded = true;
       });
+      return () => { cancelled = true; };
     } else {
       loaded = true;
     }

@@ -115,14 +115,20 @@ export async function importFlashLocal(
       easeFactor: ec.review.easeFactor,
       repetitions: ec.review.repetitions,
       lapses: ec.review.lapses,
-      stability: ec.review.stability,
-      difficulty: ec.review.difficulty,
+      // FSRS fields: default to neutral starting values so the scheduler
+      // doesn't treat missing data as 0 (which breaks the algorithm).
+      stability: ec.review.stability ?? 0.5,
+      difficulty: ec.review.difficulty ?? 5,
       lastReview: ec.review.lastReview
         ? new Date(ec.review.lastReview).getTime()
         : undefined,
     }));
 
-    await db.cards.bulkAdd(cards);
+    try {
+      await db.cards.bulkAdd(cards);
+    } catch (err: any) {
+      throw new Error(`Failed to import cards for deck "${deck.name}": ${err?.message ?? err}`);
+    }
     cardCount += cards.length;
   }
 

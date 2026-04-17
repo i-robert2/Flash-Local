@@ -23,10 +23,13 @@
   let currentMatch = $state(0);
 
   $effect(() => {
+    let cancelled = false;
     db.notes.get(noteId).then(n => {
+      if (cancelled) return;
       note = n ?? null;
       loaded = true;
     });
+    return () => { cancelled = true; };
   });
 
   function getColor(depth: number): string {

@@ -98,7 +98,7 @@
       showToast('Card updated', 'success');
     } else {
       const card = newCard(deckId, front.trim(), back.trim(), tags);
-      (card as any).noteRef = noteRef || undefined;
+      card.noteRef = noteRef || undefined;
       await db.cards.add(card);
       showToast('Card added', 'success');
     }
@@ -112,7 +112,7 @@
     }
     const tags = tagsInput.split(',').map(t => t.trim()).filter(Boolean);
     const card = newCard(deckId, front.trim(), back.trim(), tags);
-    (card as any).noteRef = noteRef || undefined;
+    card.noteRef = noteRef || undefined;
     await db.cards.add(card);
     showToast('Card added', 'success');
     front = '';
